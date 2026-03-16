@@ -5,6 +5,7 @@ import { activateTypography, deactivateTypography } from './modules/typography-e
 import { activateContrast, deactivateContrast } from './modules/contrast-analyzer';
 import { activateGrid, deactivateGrid, applyGridSettings } from './modules/grid-overlay';
 import { activateInspect, deactivateInspect } from './modules/hover-inspect';
+import { activateDrag, deactivateDrag } from './modules/element-drag';
 
 const activeFeatures = new Set<FeatureId>();
 
@@ -14,6 +15,7 @@ const featureMap: Record<FeatureId, { activate: () => void; deactivate: () => vo
   contrast: { activate: activateContrast, deactivate: deactivateContrast },
   grid: { activate: activateGrid, deactivate: deactivateGrid },
   inspect: { activate: activateInspect, deactivate: deactivateInspect },
+  drag: { activate: activateDrag, deactivate: deactivateDrag },
 };
 
 chrome.runtime.onMessage.addListener((message: unknown) => {

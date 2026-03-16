@@ -1,4 +1,4 @@
-export type FeatureId = 'skeleton' | 'typography' | 'contrast' | 'grid' | 'inspect';
+export type FeatureId = 'skeleton' | 'typography' | 'contrast' | 'grid' | 'inspect' | 'drag';
 
 export interface TypographyScaleEntry {
   level: string;

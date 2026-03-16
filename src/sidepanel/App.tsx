@@ -17,6 +17,7 @@ export function App() {
     contrast: false,
     grid: false,
     inspect: false,
+    drag: false,
   });
   const [typoReport, setTypoReport] = useState<TypographyReport | null>(null);
   const [contrastReport, setContrastReport] = useState<ContrastReport | null>(null);
@@ -81,29 +82,38 @@ export function App() {
         <h1>X-Ray Design</h1>
       </header>
 
-      <section class="panel-section">
-        <MemoToggle
-          label="Inspect"
-          description="요소에 마우스를 올려 속성 확인"
-          active={features.inspect}
-          onToggle={() => toggle('inspect')}
-        />
-        {features.inspect && inspectInfo && (
-          <InspectReportView info={inspectInfo} />
-        )}
-        {features.inspect && !inspectInfo && (
-          <div class="report-empty">페이지에서 요소 위에 마우스를 올려보세요.</div>
-        )}
-      </section>
+      {/*<section class="panel-section">*/}
+      {/*  <MemoToggle*/}
+      {/*    label="Inspect"*/}
+      {/*    description="요소에 마우스를 올려 속성 확인"*/}
+      {/*    active={features.inspect}*/}
+      {/*    onToggle={() => toggle('inspect')}*/}
+      {/*  />*/}
+      {/*  {features.inspect && inspectInfo && (*/}
+      {/*    <InspectReportView info={inspectInfo} />*/}
+      {/*  )}*/}
+      {/*  {features.inspect && !inspectInfo && (*/}
+      {/*    <div class="report-empty">페이지에서 요소 위에 마우스를 올려보세요.</div>*/}
+      {/*  )}*/}
+      {/*</section>*/}
 
       <section class="panel-section">
         <MemoToggle
-          label="Skeleton View"
-          description="배경/이미지 제거, 여백 시각화"
-          active={features.skeleton}
-          onToggle={() => toggle('skeleton')}
+          label="Element Drag"
+          description="요소를 드래그하여 자유롭게 배치 (Esc: 리셋)"
+          active={features.drag}
+          onToggle={() => toggle('drag')}
         />
       </section>
+
+      {/*<section class="panel-section">*/}
+      {/*  <MemoToggle*/}
+      {/*    label="Skeleton View"*/}
+      {/*    description="배경/이미지 제거, 여백 시각화"*/}
+      {/*    active={features.skeleton}*/}
+      {/*    onToggle={() => toggle('skeleton')}*/}
+      {/*  />*/}
+      {/*</section>*/}
 
       <section class="panel-section">
         <MemoToggle

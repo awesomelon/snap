@@ -122,6 +122,13 @@ export function getOverlayRoot(): ShadowRoot {
     .xray-inspect-tooltip__spacing { display: flex; gap: 8px; margin-top: 2px; }
     .xray-inspect-tooltip__m { color: #fdba74; }
     .xray-inspect-tooltip__p { color: #86efac; }
+    .xray-drag-highlight {
+      position: fixed;
+      border: 2px dashed #8b5cf6;
+      background: rgba(139, 92, 246, 0.06);
+      pointer-events: none;
+      border-radius: 2px;
+    }
     .xray-grid-baseline {
       position: fixed;
       top: 0;

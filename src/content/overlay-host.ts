@@ -23,6 +23,8 @@ export function getOverlayRoot(): ShadowRoot {
       background: rgba(139, 92, 246, 0.06);
       pointer-events: none;
       border-radius: 2px;
+      outline: 1px solid rgba(255, 255, 255, 0.5);
+      outline-offset: 1px;
     }
     .xray-drag-selected {
       position: fixed;
@@ -30,7 +32,7 @@ export function getOverlayRoot(): ShadowRoot {
       background: rgba(139, 92, 246, 0.10);
       pointer-events: none;
       border-radius: 2px;
-      box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.3);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5), 0 0 0 3px rgba(139, 92, 246, 0.3);
     }
     .xray-grid-container {
       position: fixed;
@@ -52,8 +54,8 @@ export function getOverlayRoot(): ShadowRoot {
       flex: 1;
       height: 100%;
       background: rgba(59, 130, 246, 0.08);
-      border-left: 1px solid rgba(59, 130, 246, 0.18);
-      border-right: 1px solid rgba(59, 130, 246, 0.18);
+      border-left: 1px solid rgba(59, 130, 246, 0.25);
+      border-right: 1px solid rgba(59, 130, 246, 0.25);
     }
     .xray-grid-baseline {
       position: fixed;

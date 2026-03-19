@@ -2,9 +2,11 @@ import { getFeatureLayer, removeFeatureLayer } from '../../overlay-host';
 import type { GridReport, GridSettings } from '@shared/types';
 
 const LAYER_ID = 'drag-grid';
+const RESIZE_DEBOUNCE_MS = 250;
 
 let lastReport: GridReport | null = null;
 let layerRef: HTMLDivElement | null = null;
+let manualOverride = false;
 
 // --- Auto-detection ---
 
@@ -97,11 +99,12 @@ function analyze(): GridReport {
 
   const containerRect = containerEl.getBoundingClientRect();
   const containerMaxWidth = containerInfo?.maxWidth ?? null;
-  const totalGutters = (gridInfo.columns - 1) * gridInfo.gutter;
+  const cols = Math.max(1, gridInfo.columns);
+  const totalGutters = (cols - 1) * gridInfo.gutter;
   const columnWidth =
     containerMaxWidth !== null
-      ? Math.round((containerMaxWidth - totalGutters) / gridInfo.columns)
-      : Math.round((containerRect.width - totalGutters) / gridInfo.columns);
+      ? Math.round((containerMaxWidth - totalGutters) / cols)
+      : Math.round((containerRect.width - totalGutters) / cols);
 
   return {
     containerMaxWidth,
@@ -153,6 +156,7 @@ function renderGrid(report: GridReport): void {
 // --- Public API ---
 
 export function mountGrid(): GridReport {
+  manualOverride = false;
   lastReport = analyze();
   renderGrid(lastReport);
   window.addEventListener('resize', onResize);
@@ -161,17 +165,24 @@ export function mountGrid(): GridReport {
 
 export function unmountGrid(): void {
   window.removeEventListener('resize', onResize);
+  cancelAnimationFrame(resizeRafId);
+  clearTimeout(resizeDebounceId);
+  resizeRafId = 0;
+  resizeDebounceId = 0;
+  manualOverride = false;
   removeFeatureLayer(LAYER_ID);
   layerRef = null;
   lastReport = null;
 }
 
 export function applySettings(settings: GridSettings): GridReport {
-  const totalGutters = (settings.columns - 1) * settings.gutterWidth;
+  manualOverride = true;
+  const cols = Math.max(1, settings.columns);
+  const totalGutters = (cols - 1) * settings.gutterWidth;
   const contentWidth =
     settings.containerMaxWidth ??
     window.innerWidth - settings.marginLeft - settings.marginRight;
-  const columnWidth = Math.round((contentWidth - totalGutters) / settings.columns);
+  const columnWidth = Math.round((contentWidth - totalGutters) / cols);
 
   lastReport = {
     columns: settings.columns,
@@ -194,6 +205,35 @@ export function getLastReport(): GridReport | null {
   return lastReport;
 }
 
+export function resetToAutoDetect(): GridReport {
+  manualOverride = false;
+  lastReport = analyze();
+  renderGrid(lastReport);
+  return lastReport;
+}
+
+let resizeRafId = 0;
+let resizeDebounceId = 0;
+
 function onResize(): void {
-  if (lastReport) renderGrid(lastReport);
+  if (!lastReport) return;
+
+  // Immediate rAF render for smooth visual feedback
+  if (!resizeRafId) {
+    resizeRafId = requestAnimationFrame(() => {
+      resizeRafId = 0;
+      if (lastReport) renderGrid(lastReport);
+    });
+  }
+
+  // Debounced re-analyze only in auto-detect mode
+  if (!manualOverride) {
+    clearTimeout(resizeDebounceId);
+    resizeDebounceId = window.setTimeout(() => {
+      resizeDebounceId = 0;
+      lastReport = analyze();
+      renderGrid(lastReport);
+      chrome.runtime.sendMessage({ type: 'GRID_REPORT', data: lastReport }).catch(() => {});
+    }, RESIZE_DEBOUNCE_MS);
+  }
 }

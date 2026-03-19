@@ -90,11 +90,7 @@ export function DragGridConfig({ report }: Readonly<Props>) {
       <button
         class="grid-reset-btn"
         onClick={() => {
-          setSettings(toSettings(report));
-          chrome.runtime.sendMessage({
-            type: 'UPDATE_GRID_SETTINGS',
-            data: toSettings(report),
-          });
+          chrome.runtime.sendMessage({ type: 'RESET_GRID_AUTO' });
         }}
       >
         Auto Detect

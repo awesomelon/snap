@@ -34,21 +34,48 @@ interface ActiveDrag {
 }
 
 // --- State ---
+//
+//  State machine:
+//
+//    IDLE ──mousedown──▶ PENDING ──threshold──▶ DRAGGING ──mouseup──▶ IDLE
+//     │                    │                       │
+//     │                    └──mouseup──▶ IDLE      └──Esc──▶ IDLE (revert)
+//     └──Esc──▶ IDLE (resetAll)
+//
 
-let active = false;
-const movedElements = new Map<HTMLElement, OriginalState>();
-let pendingDrag: PendingDrag | null = null;
-let activeDrag: ActiveDrag | null = null;
-let hoveredEl: HTMLElement | null = null;
-let highlightBox: HTMLDivElement | null = null;
-let dragRafId = 0;
-let lastMouseX = 0;
-let lastMouseY = 0;
-let getGridReport: () => GridReport | null = () => null;
+interface DragState {
+  active: boolean;
+  movedElements: Map<HTMLElement, OriginalState>;
+  pending: PendingDrag | null;
+  dragging: ActiveDrag | null;
+  hoveredEl: HTMLElement | null;
+  highlightBox: HTMLDivElement | null;
+  rafId: number;
+  lastMouseX: number;
+  lastMouseY: number;
+  getGridReport: () => GridReport | null;
+}
+
+function createInitialState(): DragState {
+  return {
+    active: false,
+    movedElements: new Map(),
+    pending: null,
+    dragging: null,
+    hoveredEl: null,
+    highlightBox: null,
+    rafId: 0,
+    lastMouseX: 0,
+    lastMouseY: 0,
+    getGridReport: () => null,
+  };
+}
+
+let state = createInitialState();
 
 // --- Helpers ---
 
-function shouldIgnore(el: Element): boolean {
+export function shouldIgnore(el: Element): boolean {
   if (!(el instanceof HTMLElement)) return true;
   if (IGNORE_TAGS.has(el.tagName)) return true;
   if (el.closest('x-ray-overlay')) return true;
@@ -86,26 +113,26 @@ function renderHighlight(el: HTMLElement): void {
   const rect = el.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return;
 
-  if (!highlightBox || !highlightBox.isConnected) {
-    highlightBox = document.createElement('div');
-    highlightBox.className = 'xray-drag-highlight';
-    layer.appendChild(highlightBox);
+  if (!state.highlightBox || !state.highlightBox.isConnected) {
+    state.highlightBox = document.createElement('div');
+    state.highlightBox.className = 'xray-drag-highlight';
+    layer.appendChild(state.highlightBox);
   }
-  highlightBox.style.cssText =
+  state.highlightBox.style.cssText =
     `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;`;
 }
 
 function clearHighlight(): void {
-  if (highlightBox) {
-    highlightBox.remove();
-    highlightBox = null;
+  if (state.highlightBox) {
+    state.highlightBox.remove();
+    state.highlightBox = null;
   }
 }
 
 // --- Fixed positioning ---
 
 export function promoteToFixed(el: HTMLElement): void {
-  if (movedElements.has(el)) return;
+  if (state.movedElements.has(el)) return;
 
   const rect = el.getBoundingClientRect();
   const computed = getComputedStyle(el);
@@ -121,7 +148,7 @@ export function promoteToFixed(el: HTMLElement): void {
     `grid-area:${computed.gridArea};order:${computed.order};` +
     `align-self:${computed.alignSelf};justify-self:${computed.justifySelf};`;
   el.parentNode?.insertBefore(placeholder, el);
-  movedElements.set(el, { cssText: el.style.cssText, placeholder });
+  state.movedElements.set(el, { cssText: el.style.cssText, placeholder });
 
   const offset = getContainingBlockOffset(el);
   el.style.position = 'fixed';
@@ -137,7 +164,7 @@ export function promoteToFixed(el: HTMLElement): void {
 // --- Snap helper ---
 
 function applySnap(rawLeft: number, rawTop: number, w: number, h: number): { left: number; top: number } {
-  const grid = getGridReport();
+  const grid = state.getGridReport();
   if (!grid) {
     renderSnapGuides(null, null);
     return { left: rawLeft, top: rawTop };
@@ -162,7 +189,7 @@ function commitDrag(pending: PendingDrag, e: MouseEvent): void {
   el.style.left = `${pos.left}px`;
   el.style.top = `${pos.top}px`;
 
-  activeDrag = { el, offsetX: offsetX + offset.x, offsetY: offsetY + offset.y };
+  state.dragging = { el, offsetX: offsetX + offset.x, offsetY: offsetY + offset.y };
   clearHighlight();
   clearSelectionHighlight();
   document.body.style.cursor = 'grabbing';
@@ -170,39 +197,39 @@ function commitDrag(pending: PendingDrag, e: MouseEvent): void {
 }
 
 function resetAll(): void {
-  for (const [el, state] of movedElements) {
+  for (const [el, orig] of state.movedElements) {
     if (el.isConnected) {
-      el.style.cssText = state.cssText;
+      el.style.cssText = orig.cssText;
     }
-    state.placeholder.remove();
+    orig.placeholder.remove();
   }
-  movedElements.clear();
+  state.movedElements.clear();
 }
 
 function finishDrag(): void {
-  if (!activeDrag) return;
-  const el = activeDrag.el;
-  activeDrag = null;
-  pendingDrag = null;
+  if (!state.dragging) return;
+  const el = state.dragging.el;
+  state.dragging = null;
+  state.pending = null;
   document.body.style.cursor = 'grab';
   document.body.style.userSelect = '';
   clearHighlight();
   clearSnapGuides();
-  hoveredEl = null;
+  state.hoveredEl = null;
   setSelected(el);
 }
 
 // --- Event handlers ---
 
 function onMouseDown(e: MouseEvent): void {
-  if (!active || activeDrag) return;
+  if (!state.active || state.dragging) return;
   const el = e.target as HTMLElement;
   if (shouldIgnore(el)) return;
   e.preventDefault();
   e.stopPropagation();
 
   const rect = el.getBoundingClientRect();
-  pendingDrag = {
+  state.pending = {
     el,
     startX: e.clientX,
     startY: e.clientY,
@@ -212,55 +239,55 @@ function onMouseDown(e: MouseEvent): void {
 }
 
 function onMouseMove(e: MouseEvent): void {
-  if (!active) return;
+  if (!state.active) return;
 
-  if (activeDrag) {
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-    if (!dragRafId) {
-      dragRafId = requestAnimationFrame(() => {
-        dragRafId = 0;
-        if (activeDrag) {
-          const rawLeft = lastMouseX - activeDrag.offsetX;
-          const rawTop = lastMouseY - activeDrag.offsetY;
-          const pos = applySnap(rawLeft, rawTop, activeDrag.el.offsetWidth, activeDrag.el.offsetHeight);
-          activeDrag.el.style.left = `${pos.left}px`;
-          activeDrag.el.style.top = `${pos.top}px`;
+  if (state.dragging) {
+    state.lastMouseX = e.clientX;
+    state.lastMouseY = e.clientY;
+    if (!state.rafId) {
+      state.rafId = requestAnimationFrame(() => {
+        state.rafId = 0;
+        if (state.dragging) {
+          const rawLeft = state.lastMouseX - state.dragging.offsetX;
+          const rawTop = state.lastMouseY - state.dragging.offsetY;
+          const pos = applySnap(rawLeft, rawTop, state.dragging.el.offsetWidth, state.dragging.el.offsetHeight);
+          state.dragging.el.style.left = `${pos.left}px`;
+          state.dragging.el.style.top = `${pos.top}px`;
         }
       });
     }
     return;
   }
 
-  if (pendingDrag) {
-    const dx = e.clientX - pendingDrag.startX;
-    const dy = e.clientY - pendingDrag.startY;
+  if (state.pending) {
+    const dx = e.clientX - state.pending.startX;
+    const dy = e.clientY - state.pending.startY;
     if (dx * dx + dy * dy > DRAG_THRESHOLD_SQ) {
-      commitDrag(pendingDrag, e);
-      pendingDrag = null;
+      commitDrag(state.pending, e);
+      state.pending = null;
     }
     return;
   }
 
   const el = e.target as HTMLElement;
-  if (shouldIgnore(el) || el === hoveredEl) return;
-  hoveredEl = el;
+  if (shouldIgnore(el) || el === state.hoveredEl) return;
+  state.hoveredEl = el;
   renderHighlight(el);
 }
 
 function onMouseUp(): void {
-  if (activeDrag) {
+  if (state.dragging) {
     finishDrag();
   }
-  pendingDrag = null;
+  state.pending = null;
 }
 
 function onClick(e: MouseEvent): void {
-  if (!active) return;
+  if (!state.active) return;
   e.preventDefault();
   e.stopPropagation();
 
-  if (!activeDrag) {
+  if (!state.dragging) {
     const el = e.target as HTMLElement;
     if (!shouldIgnore(el)) {
       setSelected(el);
@@ -269,34 +296,34 @@ function onClick(e: MouseEvent): void {
 }
 
 function onDragStart(e: DragEvent): void {
-  if (!active) return;
+  if (!state.active) return;
   e.preventDefault();
 }
 
 function onKeyDown(e: KeyboardEvent): void {
-  if (!active) return;
+  if (!state.active) return;
   if (e.key === 'Escape') {
-    if (activeDrag) {
-      const el = activeDrag.el;
-      const state = movedElements.get(el);
-      if (state) {
-        el.style.cssText = state.cssText;
-        state.placeholder.remove();
-        movedElements.delete(el);
+    if (state.dragging) {
+      const el = state.dragging.el;
+      const orig = state.movedElements.get(el);
+      if (orig) {
+        el.style.cssText = orig.cssText;
+        orig.placeholder.remove();
+        state.movedElements.delete(el);
       } else {
         el.style.position = '';
         el.style.zIndex = '';
       }
-      activeDrag = null;
-      pendingDrag = null;
+      state.dragging = null;
+      state.pending = null;
       document.body.style.cursor = 'grab';
       document.body.style.userSelect = '';
       clearHighlight();
       clearSnapGuides();
-      hoveredEl = null;
+      state.hoveredEl = null;
       setSelected(null);
     } else {
-      pendingDrag = null;
+      state.pending = null;
       setSelected(null);
       resetAll();
     }
@@ -304,23 +331,23 @@ function onKeyDown(e: KeyboardEvent): void {
 }
 
 function onScroll(): void {
-  if (!active || activeDrag || pendingDrag) return;
-  hoveredEl = null;
+  if (!state.active || state.dragging || state.pending) return;
+  state.hoveredEl = null;
   clearHighlight();
 }
 
 function onWindowMouseLeave(e: MouseEvent): void {
-  if (!active) return;
+  if (!state.active) return;
   if (e.relatedTarget !== null) return;
-  if (activeDrag) finishDrag();
-  pendingDrag = null;
+  if (state.dragging) finishDrag();
+  state.pending = null;
 }
 
 // --- Public API ---
 
 export function initDragCore(deps: { getSnapGrid: () => GridReport | null }): void {
-  active = true;
-  getGridReport = deps.getSnapGrid;
+  state.active = true;
+  state.getGridReport = deps.getSnapGrid;
   document.addEventListener('mousedown', onMouseDown, true);
   document.addEventListener('mousemove', onMouseMove, true);
   document.addEventListener('mouseup', onMouseUp, true);
@@ -333,12 +360,7 @@ export function initDragCore(deps: { getSnapGrid: () => GridReport | null }): vo
 }
 
 export function teardownDragCore(): void {
-  active = false;
-  cancelAnimationFrame(dragRafId);
-  dragRafId = 0;
-  activeDrag = null;
-  pendingDrag = null;
-  hoveredEl = null;
+  cancelAnimationFrame(state.rafId);
   clearHighlight();
   clearSnapGuides();
   document.removeEventListener('mousedown', onMouseDown, true);
@@ -352,6 +374,7 @@ export function teardownDragCore(): void {
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
   resetAll();
+  state = createInitialState();
 }
 
 export function nudgeElement(el: HTMLElement, dx: number, dy: number): void {

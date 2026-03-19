@@ -1,4 +1,4 @@
-import { mountGrid, unmountGrid, applySettings, getLastReport } from './drag/grid-renderer';
+import { mountGrid, unmountGrid, applySettings, resetToAutoDetect, getLastReport } from './drag/grid-renderer';
 import { mountKeyboardHandler, unmountKeyboardHandler, setSelected } from './drag/selection-state';
 import { initDragCore, teardownDragCore, nudgeElement } from './drag/drag-core';
 import { removeFeatureLayer } from '../overlay-host';
@@ -27,6 +27,11 @@ export function deactivateDrag(): void {
 
 export function applyGridSettings(settings: GridSettings): void {
   const report = applySettings(settings);
+  sendGridReport(report);
+}
+
+export function resetGridAutoDetect(): void {
+  const report = resetToAutoDetect();
   sendGridReport(report);
 }
 

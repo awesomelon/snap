@@ -1,3 +1,48 @@
+/* --- Design Tokens --- */
+:root {
+  --color-text: #1a1a1a;
+  --color-text-secondary: #888;
+  --color-text-tertiary: #666;
+  --color-bg: #fafafa;
+  --color-bg-elevated: #fff;
+  --color-bg-sunken: #f0f0f0;
+  --color-bg-preview: #f5f5f5;
+  --color-border: #e5e5e5;
+  --color-border-input: #ddd;
+  --color-border-subtle: #ccc;
+  --color-accent: #8b5cf6;
+  --color-grid: #3b82f6;
+  --color-grid-light: #60a5fa;
+  --color-snap: #ec4899;
+  --color-active-bg: #1a1a1a;
+  --color-active-text: #fff;
+  --space-panel: 16px;
+  --space-section: 16px;
+  --space-field: 6px;
+  --space-inline: 12px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-text: #e0e0e0;
+    --color-text-secondary: #888;
+    --color-text-tertiary: #aaa;
+    --color-bg: #1a1a1a;
+    --color-bg-elevated: #2a2a2a;
+    --color-bg-sunken: #2a2a2a;
+    --color-bg-preview: #2a2a2a;
+    --color-border: #333;
+    --color-border-input: #444;
+    --color-border-subtle: #444;
+    --color-grid-light: #60a5fa;
+    --color-active-bg: #fff;
+    --color-active-text: #1a1a1a;
+  }
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -7,40 +52,48 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
-  color: #1a1a1a;
-  background: #fafafa;
+  color: var(--color-text);
+  background: var(--color-bg);
   width: 100%;
   min-height: 100vh;
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #e0e0e0;
-    background: #1a1a1a;
-  }
-}
-
 .panel {
-  padding: 16px;
+  padding: var(--space-panel);
 }
 
 .panel-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-section);
+}
+
+.status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: var(--color-accent);
+  color: #fff;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.onboarding-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
 }
 
 .panel-section {
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e5e5e5;
-}
-
-@media (prefers-color-scheme: dark) {
-  .panel-section {
-    border-bottom-color: #333;
-  }
+  margin-bottom: var(--space-section);
+  padding-bottom: var(--space-section);
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* Feature Toggle */
@@ -64,16 +117,16 @@ body {
 
 .feature-toggle__desc {
   font-size: 11px;
-  color: #888;
+  color: var(--color-text-secondary);
 }
 
 .toggle-btn {
   flex-shrink: 0;
   padding: 4px 12px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background: #fff;
-  color: #666;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-tertiary);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -85,23 +138,9 @@ body {
 }
 
 .toggle-btn--active {
-  background: #1a1a1a;
-  color: #fff;
-  border-color: #1a1a1a;
-}
-
-@media (prefers-color-scheme: dark) {
-  .toggle-btn {
-    background: #2a2a2a;
-    border-color: #444;
-    color: #aaa;
-  }
-
-  .toggle-btn--active {
-    background: #fff;
-    color: #1a1a1a;
-    border-color: #fff;
-  }
+  background: var(--color-active-bg);
+  color: var(--color-active-text);
+  border-color: var(--color-active-bg);
 }
 
 /* Grid Toggle */
@@ -112,16 +151,10 @@ body {
 .grid-toggle__label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-field);
   font-size: 12px;
-  color: #666;
+  color: var(--color-text-tertiary);
   cursor: pointer;
-}
-
-@media (prefers-color-scheme: dark) {
-  .grid-toggle__label {
-    color: #aaa;
-  }
 }
 
 /* Report common */
@@ -133,7 +166,7 @@ body {
 .grid-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: var(--space-field);
   margin-bottom: 10px;
 }
 
@@ -145,38 +178,27 @@ body {
 
 .grid-field__label {
   font-size: 10px;
-  color: #888;
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
 .grid-field__input {
   width: 100%;
   padding: 4px 6px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   font-family: inherit;
-  background: #fff;
-  color: #1a1a1a;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
   outline: none;
   transition: border-color 0.15s;
 }
 
 .grid-field__input:focus {
-  border-color: #3b82f6;
-}
-
-@media (prefers-color-scheme: dark) {
-  .grid-field__input {
-    background: #2a2a2a;
-    border-color: #444;
-    color: #e0e0e0;
-  }
-  .grid-field__input:focus {
-    border-color: #60a5fa;
-  }
+  border-color: var(--color-grid);
 }
 
 .grid-field__input::-webkit-inner-spin-button {
@@ -188,20 +210,14 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 6px 8px;
-  background: #f0f0f0;
-  border-radius: 4px;
+  background: var(--color-bg-sunken);
+  border-radius: var(--radius-md);
   margin-bottom: 8px;
   font-size: 12px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .grid-computed {
-    background: #2a2a2a;
-  }
-}
-
 .grid-computed__label {
-  color: #888;
+  color: var(--color-text-secondary);
 }
 
 .grid-computed__value {
@@ -210,17 +226,11 @@ body {
 }
 
 .grid-preview {
-  background: #f5f5f5;
-  border-radius: 6px;
+  background: var(--color-bg-preview);
+  border-radius: var(--radius-lg);
   padding: 8px;
   height: 40px;
   margin-bottom: 8px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .grid-preview {
-    background: #2a2a2a;
-  }
 }
 
 .grid-preview__inner {
@@ -238,27 +248,16 @@ body {
 .grid-reset-btn {
   width: 100%;
   padding: 5px 0;
-  border: 1px dashed #ccc;
-  border-radius: 4px;
+  border: 1px dashed var(--color-border-subtle);
+  border-radius: var(--radius-md);
   background: transparent;
-  color: #888;
+  color: var(--color-text-secondary);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .grid-reset-btn:hover {
-  border-color: #3b82f6;
-  color: #3b82f6;
-}
-
-@media (prefers-color-scheme: dark) {
-  .grid-reset-btn {
-    border-color: #444;
-    color: #888;
-  }
-  .grid-reset-btn:hover {
-    border-color: #60a5fa;
-    color: #60a5fa;
-  }
+  border-color: var(--color-grid);
+  color: var(--color-grid);
 }

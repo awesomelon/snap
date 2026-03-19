@@ -12,8 +12,9 @@ export interface SnapResult {
 }
 
 function computeColumnEdges(grid: GridReport): number[] {
+  const cols = Math.max(1, grid.columns);
   const edges: number[] = [];
-  for (let i = 0; i < grid.columns; i++) {
+  for (let i = 0; i < cols; i++) {
     const colLeft = grid.marginLeft + i * (grid.columnWidth + grid.gutterWidth);
     edges.push(colLeft);
     edges.push(colLeft + grid.columnWidth);

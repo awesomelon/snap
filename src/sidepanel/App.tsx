@@ -65,7 +65,7 @@ export function App() {
   return (
     <div class="panel">
       <header class="panel-header">
-        <h1>Snap</h1>
+        <h1>Snap {dragEnabled && <span class="status-badge">Active</span>}</h1>
       </header>
 
       <section class="panel-section">
@@ -75,6 +75,11 @@ export function App() {
           active={dragEnabled}
           onToggle={toggle}
         />
+        {!dragEnabled && (
+          <p class="onboarding-hint">
+            ON을 누르면 페이지 요소를 자유롭게 드래그할 수 있습니다. 그리드에 자동으로 스냅됩니다.
+          </p>
+        )}
         {dragEnabled && (
           <>
             <div class="grid-toggle">

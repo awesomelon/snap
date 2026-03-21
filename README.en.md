@@ -10,7 +10,10 @@ A Chrome extension that lets you freely drag webpage elements to explore layouts
 Drag any element on a page and it magnetically snaps to the auto-detected grid.
 
 - **Mouse drag**: Grab and move elements — auto-snaps to column edges and baselines
-- **Click select + arrow keys**: Click an element, then nudge with arrow keys (1px per press, `Shift` + arrow for 10px)
+- **Multi-select**: `Ctrl/Cmd` + click to add/remove elements from the selection
+- **Group drag**: Move all selected elements together — the clicked element snaps to grid, others maintain relative position
+- **Rubber band selection**: Drag on an empty area to marquee-select multiple elements at once
+- **Click select + arrow keys**: Click an element, then nudge with arrow keys (1px per press, `Shift` + arrow for 10px) — multi-selected elements all move simultaneously
 - **Snap guide lines**: Pink guide lines appear when snapping, showing alignment positions
 - **Grid overlay**: Auto-detects and displays the page's column grid + baseline grid
 - **Manual override**: Adjust columns, gutter, margin, baseline directly from the Side Panel
@@ -31,7 +34,7 @@ Drag any element on a page and it magnetically snaps to the auto-detected grid.
 | Language | TypeScript (strict) |
 | Build | Vite + @crxjs/vite-plugin |
 | UI | Preact |
-| Test | Vitest + jsdom (105 tests) |
+| Test | Vitest + jsdom (115 tests) |
 
 ## Getting Started
 
@@ -66,11 +69,11 @@ src/
 │   ├── modules/
 │   │   ├── element-drag.ts  # Orchestrator (Grid + Drag + Selection)
 │   │   └── drag/
-│   │       ├── drag-core.ts       # Mouse drag + magnetic snap
+│   │       ├── drag-core.ts       # Mouse drag + magnetic snap + group drag + rubber band
 │   │       ├── grid-renderer.ts   # Column grid auto-detection + rendering
 │   │       ├── snap-engine.ts     # Column/baseline snap calculation (cached)
 │   │       ├── snap-guides.ts     # Snap guide line display
-│   │       └── selection-state.ts # Click selection + keyboard nudge
+│   │       └── selection-state.ts # Multi-select + keyboard nudge
 │   ├── overlay-host.ts      # Shadow DOM isolated overlay
 │   └── index.ts             # Content Script entry point
 ├── sidepanel/               # Side Panel UI (Preact)
@@ -78,7 +81,7 @@ src/
 │   └── styles/
 └── shared/                  # Shared types, messages, error handling
 tests/
-└── unit/                    # Unit tests (105 tests)
+└── unit/                    # Unit tests (115 tests)
 ```
 
 ## Architecture
@@ -111,11 +114,21 @@ The snap engine uses a Figma-inspired magnetic field with hysteresis:
 ```
   State machine:
 
-    IDLE ──mousedown──▶ PENDING ──threshold──▶ DRAGGING ──mouseup──▶ IDLE
-     │                    │                       │
-     │                    └──mouseup──▶ IDLE      └──Esc──▶ IDLE (revert)
+    IDLE ──mousedown(element)──▶ PENDING ──threshold──▶ DRAGGING ──mouseup──▶ IDLE
+     │                            │                       │
+     │                            └──mouseup──▶ IDLE      └──Esc──▶ IDLE (revert)
+     │
+     ├──mousedown(empty)──▶ PENDING_MARQUEE ──threshold──▶ MARQUEE ──mouseup──▶ IDLE
+     │                        │
+     │                        └──mouseup──▶ IDLE (clear selection)
+     │
      └──Esc──▶ IDLE (resetAll)
 ```
+
+## Documentation
+
+- [DESIGN.md](./DESIGN.md) — Design system (colors, typography, interaction states)
+- [CLAUDE.md](./CLAUDE.md) — AI project guidelines
 
 ## License
 

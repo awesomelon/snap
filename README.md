@@ -10,7 +10,10 @@
 페이지의 요소를 드래그하면 자동 감지된 그리드에 마그네틱처럼 붙습니다.
 
 - **마우스 드래그**: 요소를 잡아 이동 — 컬럼 경계와 베이스라인에 자동 스냅
-- **클릭 선택 + 방향키**: 요소를 클릭한 뒤 방향키로 1px씩 미세 조정 (`Shift` + 방향키로 10px)
+- **멀티 셀렉트**: `Ctrl/Cmd` + 클릭으로 여러 요소를 선택에 추가/제거
+- **그룹 드래그**: 선택된 요소를 함께 이동 — 클릭한 요소만 그리드에 스냅, 나머지는 상대 위치 유지
+- **영역 선택 (Rubber Band)**: 빈 영역을 드래그하면 사각형 안의 요소들이 일괄 선택
+- **클릭 선택 + 방향키**: 요소를 클릭한 뒤 방향키로 1px씩 미세 조정 (`Shift` + 방향키로 10px) — 멀티 셀렉트 시 모든 요소가 동시에 이동
 - **스냅 가이드 라인**: 스냅 시 분홍색 가이드 라인이 나타나 정렬 위치를 표시
 - **그리드 오버레이**: 페이지의 컬럼 그리드 + 베이스라인 격자를 자동 감지하여 표시
 - **수동 오버라이드**: Side Panel에서 columns, gutter, margin, baseline 등 직접 조절
@@ -31,7 +34,7 @@
 | Language | TypeScript (strict) |
 | Build | Vite + @crxjs/vite-plugin |
 | UI | Preact |
-| Test | Vitest + jsdom (105 tests) |
+| Test | Vitest + jsdom (115 tests) |
 
 ## Getting Started
 
@@ -66,11 +69,11 @@ src/
 │   ├── modules/
 │   │   ├── element-drag.ts  # 오케스트레이터 (Grid + Drag + Selection 통합)
 │   │   └── drag/
-│   │       ├── drag-core.ts       # 마우스 드래그 + 마그네틱 스냅
+│   │       ├── drag-core.ts       # 마우스 드래그 + 마그네틱 스냅 + 그룹 드래그 + 영역 선택
 │   │       ├── grid-renderer.ts   # 컬럼 그리드 자동 감지 + 렌더링
 │   │       ├── snap-engine.ts     # 컬럼/베이스라인 스냅 계산 (캐시)
 │   │       ├── snap-guides.ts     # 스냅 가이드 라인 표시
-│   │       └── selection-state.ts # 클릭 선택 + 방향키 이동
+│   │       └── selection-state.ts # 멀티 셀렉트 + 방향키 이동
 │   ├── overlay-host.ts      # Shadow DOM 격리 오버레이
 │   └── index.ts             # Content Script 진입점
 ├── sidepanel/               # Side Panel UI (Preact)
@@ -78,8 +81,13 @@ src/
 │   └── styles/
 └── shared/                  # 공유 타입, 메시지, 에러 핸들링
 tests/
-└── unit/                    # 단위 테스트 (105 tests)
+└── unit/                    # 단위 테스트 (115 tests)
 ```
+
+## Documentation
+
+- [DESIGN.md](./DESIGN.md) — 디자인 시스템 (색상, 타이포그래피, 인터랙션 상태)
+- [CLAUDE.md](./CLAUDE.md) — AI 프로젝트 가이드라인
 
 ## License
 

@@ -38,6 +38,8 @@ interface ActiveDrag {
   offsetY: number;
   cbOffsetX: number;
   cbOffsetY: number;
+  cachedWidth: number;
+  cachedHeight: number;
 }
 
 // --- State ---
@@ -142,10 +144,14 @@ function clearHighlight(): void {
 
 // --- Fixed positioning ---
 
-export function promoteToFixed(el: HTMLElement): void {
-  if (state.movedElements.has(el)) return;
-
+export function promoteToFixed(el: HTMLElement): { offset: { x: number; y: number }; width: number; height: number } {
   const rect = el.getBoundingClientRect();
+  const offset = getContainingBlockOffset(el);
+
+  if (state.movedElements.has(el)) {
+    return { offset, width: rect.width, height: rect.height };
+  }
+
   const computed = getComputedStyle(el);
 
   const placeholder = document.createElement('div');
@@ -161,7 +167,6 @@ export function promoteToFixed(el: HTMLElement): void {
   el.parentNode?.insertBefore(placeholder, el);
   state.movedElements.set(el, { cssText: el.style.cssText, placeholder });
 
-  const offset = getContainingBlockOffset(el);
   el.style.position = 'fixed';
   el.style.left = `${rect.left - offset.x}px`;
   el.style.top = `${rect.top - offset.y}px`;
@@ -170,6 +175,8 @@ export function promoteToFixed(el: HTMLElement): void {
   el.style.zIndex = '2147483646';
   el.style.margin = '0';
   el.style.boxSizing = 'border-box';
+
+  return { offset, width: rect.width, height: rect.height };
 }
 
 // --- Magnetic snap ---
@@ -253,9 +260,8 @@ function applySnap(rawLeft: number, rawTop: number, w: number, h: number): { lef
 function commitDrag(pending: PendingDrag, e: MouseEvent): void {
   const { el, offsetX, offsetY } = pending;
 
-  promoteToFixed(el);
-
-  const offset = getContainingBlockOffset(el);
+  // promoteToFixed returns the offset and dimensions — no duplicate DOM traversal
+  const { offset, width, height } = promoteToFixed(el);
 
   // Set dragging state before applySnap so it can access cbOffset
   state.dragging = {
@@ -264,11 +270,13 @@ function commitDrag(pending: PendingDrag, e: MouseEvent): void {
     offsetY: offsetY + offset.y,
     cbOffsetX: offset.x,
     cbOffsetY: offset.y,
+    cachedWidth: width,
+    cachedHeight: height,
   };
 
   const rawLeft = e.clientX - offsetX - offset.x;
   const rawTop = e.clientY - offsetY - offset.y;
-  const pos = applySnap(rawLeft, rawTop, el.offsetWidth, el.offsetHeight);
+  const pos = applySnap(rawLeft, rawTop, width, height);
 
   el.style.left = `${pos.left}px`;
   el.style.top = `${pos.top}px`;
@@ -335,7 +343,7 @@ function onMouseMove(e: MouseEvent): void {
         if (state.dragging) {
           const rawLeft = state.lastMouseX - state.dragging.offsetX;
           const rawTop = state.lastMouseY - state.dragging.offsetY;
-          const pos = applySnap(rawLeft, rawTop, state.dragging.el.offsetWidth, state.dragging.el.offsetHeight);
+          const pos = applySnap(rawLeft, rawTop, state.dragging.cachedWidth, state.dragging.cachedHeight);
           state.dragging.el.style.left = `${pos.left}px`;
           state.dragging.el.style.top = `${pos.top}px`;
         }

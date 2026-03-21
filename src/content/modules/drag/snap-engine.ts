@@ -28,7 +28,14 @@ interface AxisSnapResult {
   nearestFromA: boolean;
 }
 
+// Cache column edges to avoid re-allocation every frame during drag
+let cachedEdges: number[] = [];
+let cachedEdgeKey = '';
+
 function computeColumnEdges(grid: GridReport): number[] {
+  const key = `${grid.columns}|${grid.columnWidth}|${grid.gutterWidth}|${grid.marginLeft}`;
+  if (key === cachedEdgeKey) return cachedEdges;
+
   const cols = Math.max(1, grid.columns);
   const edges: number[] = [];
   for (let i = 0; i < cols; i++) {
@@ -36,6 +43,8 @@ function computeColumnEdges(grid: GridReport): number[] {
     edges.push(colLeft);
     edges.push(colLeft + grid.columnWidth);
   }
+  cachedEdges = edges;
+  cachedEdgeKey = key;
   return edges;
 }
 

@@ -2,10 +2,11 @@ import { mountGrid, unmountGrid, applySettings, resetToAutoDetect, getLastReport
 import { mountKeyboardHandler, unmountKeyboardHandler, setSelected } from './drag/selection-state';
 import { initDragCore, teardownDragCore, nudgeElement } from './drag/drag-core';
 import { removeFeatureLayer } from '../overlay-host';
+import { swallowDisconnect } from '@shared/messages';
 import type { GridReport, GridSettings } from '@shared/types';
 
 function sendGridReport(report: GridReport): void {
-  chrome.runtime.sendMessage({ type: 'GRID_REPORT', data: report }).catch(() => {});
+  chrome.runtime.sendMessage({ type: 'GRID_REPORT', data: report }).catch(swallowDisconnect);
 }
 
 export function activateDrag(): void {

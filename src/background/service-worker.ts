@@ -1,4 +1,4 @@
-import { isMessage } from '../shared/messages';
+import { isMessage, swallowDisconnect } from '../shared/messages';
 
 let cachedTabId: number | undefined;
 
@@ -13,13 +13,13 @@ chrome.windows.onFocusChanged.addListener(() => {
 
 function sendToActiveTab(message: unknown): void {
   if (cachedTabId) {
-    chrome.tabs.sendMessage(cachedTabId, message).catch(() => {});
+    chrome.tabs.sendMessage(cachedTabId, message).catch(swallowDisconnect);
     return;
   }
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     cachedTabId = tabs[0]?.id;
     if (cachedTabId) {
-      chrome.tabs.sendMessage(cachedTabId, message).catch(() => {});
+      chrome.tabs.sendMessage(cachedTabId, message).catch(swallowDisconnect);
     }
   });
 }
@@ -40,7 +40,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (fromContentScript && (message.type === 'CONTENT_READY' || message.type === 'FEATURE_STATE_CHANGED' || message.type === 'GRID_REPORT')) {
-    chrome.runtime.sendMessage(message).catch(() => {});
+    chrome.runtime.sendMessage(message).catch(swallowDisconnect);
   }
 
   sendResponse({ ok: true });

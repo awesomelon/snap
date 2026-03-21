@@ -1,4 +1,4 @@
-import { isMessage } from '../shared/messages';
+import { isMessage, swallowDisconnect } from '../shared/messages';
 import type { FeatureId } from '../shared/types';
 import { activateDrag, deactivateDrag, applyGridSettings, resetGridAutoDetect, setGridVisible } from './modules/element-drag';
 
@@ -8,7 +8,7 @@ const featureMap: Record<FeatureId, { activate: () => void; deactivate: () => vo
   drag: { activate: activateDrag, deactivate: deactivateDrag },
 };
 
-chrome.runtime.sendMessage({ type: 'CONTENT_READY' }).catch(() => {});
+chrome.runtime.sendMessage({ type: 'CONTENT_READY' }).catch(swallowDisconnect);
 
 chrome.runtime.onMessage.addListener((message: unknown) => {
   if (!isMessage(message)) return;
@@ -28,7 +28,7 @@ chrome.runtime.onMessage.addListener((message: unknown) => {
         type: 'FEATURE_STATE_CHANGED',
         feature,
         enabled,
-      }).catch(() => {});
+      }).catch(swallowDisconnect);
       break;
     }
 

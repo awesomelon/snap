@@ -17,3 +17,10 @@ export function isMessage(value: unknown): value is Message {
     typeof (value as Message).type === 'string'
   );
 }
+
+/** Suppress closed-port errors, warn on real errors */
+export function swallowDisconnect(err: unknown): void {
+  if (err instanceof Error && err.message.includes('Receiving end does not exist')) return;
+  if (err instanceof Error && err.message.includes('Could not establish connection')) return;
+  console.warn('[Snap]', err);
+}

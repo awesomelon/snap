@@ -2,14 +2,14 @@ import { getFeatureLayer } from '../../overlay-host';
 
 type MoveCallback = (el: HTMLElement, dx: number, dy: number) => void;
 
-let selectedEl: HTMLElement | null = null;
-let highlightBox: HTMLDivElement | null = null;
+const selectedSet = new Set<HTMLElement>();
+const highlightBoxes = new Map<HTMLElement, HTMLDivElement>();
 let moveCallback: MoveCallback | null = null;
 
 const ARROW_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
 function onKeyDown(e: KeyboardEvent): void {
-  if (!selectedEl || !ARROW_KEYS.has(e.key)) return;
+  if (selectedSet.size === 0 || !ARROW_KEYS.has(e.key)) return;
 
   e.preventDefault();
   e.stopPropagation();
@@ -18,46 +18,70 @@ function onKeyDown(e: KeyboardEvent): void {
   const dx = e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0;
   const dy = e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0;
 
-  moveCallback?.(selectedEl, dx, dy);
-  renderSelectionHighlight(selectedEl);
+  for (const el of selectedSet) {
+    moveCallback?.(el, dx, dy);
+  }
+  renderAllHighlights();
 }
 
-function renderSelectionHighlight(el: HTMLElement): void {
+function renderHighlightFor(el: HTMLElement): void {
   const layer = getFeatureLayer('drag');
   const rect = el.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return;
 
-  if (!highlightBox || !highlightBox.isConnected) {
-    highlightBox = document.createElement('div');
-    highlightBox.className = 'xray-drag-selected';
-    layer.appendChild(highlightBox);
+  let box = highlightBoxes.get(el);
+  if (!box || !box.isConnected) {
+    box = document.createElement('div');
+    box.className = 'xray-drag-selected';
+    layer.appendChild(box);
+    highlightBoxes.set(el, box);
   }
-  highlightBox.style.cssText =
+  box.style.cssText =
     `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;`;
 }
 
-export function setSelected(el: HTMLElement | null): void {
-  selectedEl = el;
-  if (el) {
-    renderSelectionHighlight(el);
-  } else {
-    clearSelectionHighlight();
+function renderAllHighlights(): void {
+  for (const el of selectedSet) {
+    renderHighlightFor(el);
   }
 }
 
-export function getSelected(): HTMLElement | null {
-  return selectedEl;
+export function toggleSelected(el: HTMLElement): void {
+  if (selectedSet.has(el)) {
+    selectedSet.delete(el);
+    const box = highlightBoxes.get(el);
+    if (box) {
+      box.remove();
+      highlightBoxes.delete(el);
+    }
+  } else {
+    selectedSet.add(el);
+    renderHighlightFor(el);
+  }
+}
+
+export function replaceSelection(el: HTMLElement | null): void {
+  clearSelectionHighlight();
+  selectedSet.clear();
+  if (el) {
+    selectedSet.add(el);
+    renderHighlightFor(el);
+  }
+}
+
+export function getSelected(): Set<HTMLElement> {
+  return selectedSet;
 }
 
 export function clearSelectionHighlight(): void {
-  if (highlightBox) {
-    highlightBox.remove();
-    highlightBox = null;
+  for (const box of highlightBoxes.values()) {
+    box.remove();
   }
+  highlightBoxes.clear();
 }
 
 export function refreshSelectionHighlight(): void {
-  if (selectedEl) renderSelectionHighlight(selectedEl);
+  renderAllHighlights();
 }
 
 export function mountKeyboardHandler(onMove: MoveCallback): void {
@@ -67,7 +91,12 @@ export function mountKeyboardHandler(onMove: MoveCallback): void {
 
 export function unmountKeyboardHandler(): void {
   document.removeEventListener('keydown', onKeyDown, true);
-  selectedEl = null;
+  selectedSet.clear();
   moveCallback = null;
   clearSelectionHighlight();
+}
+
+// Backward-compat alias used by drag-core (finishDrag, onClick)
+export function setSelected(el: HTMLElement | null): void {
+  replaceSelection(el);
 }

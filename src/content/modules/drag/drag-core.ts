@@ -1,7 +1,13 @@
 import { getFeatureLayer } from '../../overlay-host';
 import { snapToGrid } from './snap-engine';
 import { renderSnapGuides, clearSnapGuides } from './snap-guides';
-import { setSelected, clearSelectionHighlight } from './selection-state';
+import {
+  getSelected,
+  replaceSelection,
+  toggleSelected,
+  clearSelectionHighlight,
+  refreshSelectionHighlight,
+} from './selection-state';
 import type { GridReport } from '@shared/types';
 
 // --- Constants ---
@@ -42,13 +48,29 @@ interface ActiveDrag {
   cachedHeight: number;
 }
 
+interface SecondaryDrag {
+  el: HTMLElement;
+  dx: number;
+  dy: number;
+}
+
+interface PendingMarquee {
+  startX: number;
+  startY: number;
+}
+
 // --- State ---
 //
 //  State machine:
 //
-//    IDLE ──mousedown──▶ PENDING ──threshold──▶ DRAGGING ──mouseup──▶ IDLE
-//     │                    │                       │
-//     │                    └──mouseup──▶ IDLE      └──Esc──▶ IDLE (revert)
+//    IDLE ──mousedown(element)──▶ PENDING ──threshold──▶ DRAGGING ──mouseup──▶ IDLE
+//     │                            │                       │
+//     │                            └──mouseup──▶ IDLE      └──Esc──▶ IDLE (revert)
+//     │
+//     ├──mousedown(empty)──▶ PENDING_MARQUEE ──threshold──▶ MARQUEE ──mouseup──▶ IDLE
+//     │                        │
+//     │                        └──mouseup──▶ IDLE (click on empty = clear selection)
+//     │
 //     └──Esc──▶ IDLE (resetAll)
 //
 
@@ -57,6 +79,7 @@ interface DragState {
   movedElements: Map<HTMLElement, OriginalState>;
   pending: PendingDrag | null;
   dragging: ActiveDrag | null;
+  secondaries: SecondaryDrag[];
   hoveredEl: HTMLElement | null;
   highlightBox: HTMLDivElement | null;
   rafId: number;
@@ -65,6 +88,9 @@ interface DragState {
   wasSnappedX: boolean;
   wasSnappedY: boolean;
   getGridReport: () => GridReport | null;
+  pendingMarquee: PendingMarquee | null;
+  marqueeActive: boolean;
+  marqueeBox: HTMLDivElement | null;
 }
 
 function createInitialState(): DragState {
@@ -73,6 +99,7 @@ function createInitialState(): DragState {
     movedElements: new Map(),
     pending: null,
     dragging: null,
+    secondaries: [],
     hoveredEl: null,
     highlightBox: null,
     rafId: 0,
@@ -81,6 +108,9 @@ function createInitialState(): DragState {
     wasSnappedX: false,
     wasSnappedY: false,
     getGridReport: () => null,
+    pendingMarquee: null,
+    marqueeActive: false,
+    marqueeBox: null,
   };
 }
 
@@ -214,16 +244,13 @@ function applySnap(rawLeft: number, rawTop: number, w: number, h: number): { lef
     return { left: rawLeft, top: rawTop };
   }
 
-  // Containing block offset: convert to viewport-relative for accurate snap
   const cbX = state.dragging?.cbOffsetX ?? 0;
   const cbY = state.dragging?.cbOffsetY ?? 0;
   const snapped = snapToGrid(rawLeft + cbX, rawTop + cbY, w, h, grid);
 
-  // Convert snap targets back to containing-block-relative
   const snapTargetLeft = snapped.snapTargetLeft - cbX;
   const snapTargetTop = snapped.snapTargetTop - cbY;
 
-  // Adaptive magnetic zone: scale with gutter size
   const adaptiveZone = Math.min(MAGNETIC_ZONE, Math.max(1, grid.gutterWidth * 0.6));
   const adaptiveBreakaway = adaptiveZone * (BREAKAWAY_ZONE / MAGNETIC_ZONE);
 
@@ -246,7 +273,6 @@ function applySnap(rawLeft: number, rawTop: number, w: number, h: number): { lef
     state.wasSnappedY = false;
   }
 
-  // Guide lines remain viewport-relative (overlay is position: fixed)
   renderSnapGuides(
     state.wasSnappedX ? snapped.nearestGuideX : null,
     state.wasSnappedY ? snapped.nearestGuideY : null,
@@ -259,11 +285,22 @@ function applySnap(rawLeft: number, rawTop: number, w: number, h: number): { lef
 
 function commitDrag(pending: PendingDrag, e: MouseEvent): void {
   const { el, offsetX, offsetY } = pending;
+  const selectedSet = getSelected();
 
-  // promoteToFixed returns the offset and dimensions — no duplicate DOM traversal
+  // If dragging a selected element in a multi-selection, do group drag
+  const isGroupDrag = selectedSet.has(el) && selectedSet.size > 1;
+
+  if (!isGroupDrag && !selectedSet.has(el)) {
+    replaceSelection(el);
+  }
+
+  // Lazy cleanup: remove stale elements from selection
+  for (const sel of selectedSet) {
+    if (!sel.isConnected) selectedSet.delete(sel);
+  }
+
   const { offset, width, height } = promoteToFixed(el);
 
-  // Set dragging state before applySnap so it can access cbOffset
   state.dragging = {
     el,
     offsetX: offsetX + offset.x,
@@ -274,6 +311,22 @@ function commitDrag(pending: PendingDrag, e: MouseEvent): void {
     cachedHeight: height,
   };
 
+  // Compute secondary offsets for group drag
+  state.secondaries = [];
+  if (isGroupDrag) {
+    const primaryRect = el.getBoundingClientRect();
+    for (const sel of selectedSet) {
+      if (sel === el) continue;
+      const { offset: selOffset } = promoteToFixed(sel);
+      const selRect = sel.getBoundingClientRect();
+      state.secondaries.push({
+        el: sel,
+        dx: (selRect.left - selOffset.x) - (primaryRect.left - offset.x),
+        dy: (selRect.top - selOffset.y) - (primaryRect.top - offset.y),
+      });
+    }
+  }
+
   const rawLeft = e.clientX - offsetX - offset.x;
   const rawTop = e.clientY - offsetY - offset.y;
   const pos = applySnap(rawLeft, rawTop, width, height);
@@ -281,8 +334,13 @@ function commitDrag(pending: PendingDrag, e: MouseEvent): void {
   el.style.left = `${pos.left}px`;
   el.style.top = `${pos.top}px`;
 
+  for (const sec of state.secondaries) {
+    sec.el.style.left = `${pos.left + sec.dx}px`;
+    sec.el.style.top = `${pos.top + sec.dy}px`;
+  }
+
   clearHighlight();
-  clearSelectionHighlight();
+  if (!isGroupDrag) clearSelectionHighlight();
   document.body.style.cursor = 'grabbing';
   document.body.style.userSelect = 'none';
 }
@@ -300,8 +358,10 @@ function resetAll(): void {
 function finishDrag(): void {
   if (!state.dragging) return;
   const el = state.dragging.el;
+  const wasGroupDrag = state.secondaries.length > 0;
   state.dragging = null;
   state.pending = null;
+  state.secondaries = [];
   state.wasSnappedX = false;
   state.wasSnappedY = false;
   document.body.style.cursor = 'grab';
@@ -309,15 +369,97 @@ function finishDrag(): void {
   clearHighlight();
   clearSnapGuides();
   state.hoveredEl = null;
-  setSelected(el);
+
+  if (wasGroupDrag) {
+    refreshSelectionHighlight();
+  } else {
+    replaceSelection(el);
+  }
+}
+
+// --- Marquee ---
+
+function commitMarquee(pending: PendingMarquee, e: MouseEvent): void {
+  state.marqueeActive = true;
+  const layer = getFeatureLayer('drag');
+  if (!state.marqueeBox || !state.marqueeBox.isConnected) {
+    state.marqueeBox = document.createElement('div');
+    state.marqueeBox.className = 'xray-marquee';
+    layer.appendChild(state.marqueeBox);
+  }
+  updateMarqueeBox(pending.startX, pending.startY, e.clientX, e.clientY);
+  document.body.style.cursor = 'crosshair';
+  document.body.style.userSelect = 'none';
+}
+
+function updateMarqueeBox(x1: number, y1: number, x2: number, y2: number): void {
+  if (!state.marqueeBox) return;
+  const left = Math.min(x1, x2);
+  const top = Math.min(y1, y2);
+  const width = Math.abs(x2 - x1);
+  const height = Math.abs(y2 - y1);
+  state.marqueeBox.style.cssText =
+    `left:${left}px;top:${top}px;width:${width}px;height:${height}px;`;
+}
+
+function finishMarquee(e: MouseEvent, addToSelection: boolean): void {
+  if (!state.pendingMarquee) return;
+  const { startX, startY } = state.pendingMarquee;
+  const endX = e.clientX;
+  const endY = e.clientY;
+
+  const left = Math.min(startX, endX);
+  const top = Math.min(startY, endY);
+  const right = Math.max(startX, endX);
+  const bottom = Math.max(startY, endY);
+
+  if (state.marqueeBox) {
+    state.marqueeBox.remove();
+    state.marqueeBox = null;
+  }
+  state.marqueeActive = false;
+  state.pendingMarquee = null;
+  document.body.style.cursor = 'grab';
+  document.body.style.userSelect = '';
+
+  // Too small = click on empty → clear selection
+  if (Math.abs(endX - startX) < 3 && Math.abs(endY - startY) < 3) {
+    if (!addToSelection) replaceSelection(null);
+    return;
+  }
+
+  if (!addToSelection) replaceSelection(null);
+
+  const candidates = document.body.querySelectorAll('*');
+  for (const candidate of candidates) {
+    if (shouldIgnore(candidate)) continue;
+    const el = candidate as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+
+    if (rect.left < right && rect.right > left && rect.top < bottom && rect.bottom > top) {
+      // Skip container elements that fully enclose the marquee
+      if (rect.left <= left && rect.right >= right && rect.top <= top && rect.bottom >= bottom) {
+        continue;
+      }
+      toggleSelected(el);
+    }
+  }
 }
 
 // --- Event handlers ---
 
 function onMouseDown(e: MouseEvent): void {
-  if (!state.active || state.dragging) return;
+  if (!state.active || state.dragging || state.marqueeActive) return;
   const el = e.target as HTMLElement;
-  if (shouldIgnore(el)) return;
+
+  if (shouldIgnore(el)) {
+    e.preventDefault();
+    e.stopPropagation();
+    state.pendingMarquee = { startX: e.clientX, startY: e.clientY };
+    return;
+  }
+
   e.preventDefault();
   e.stopPropagation();
 
@@ -346,8 +488,29 @@ function onMouseMove(e: MouseEvent): void {
           const pos = applySnap(rawLeft, rawTop, state.dragging.cachedWidth, state.dragging.cachedHeight);
           state.dragging.el.style.left = `${pos.left}px`;
           state.dragging.el.style.top = `${pos.top}px`;
+
+          for (const sec of state.secondaries) {
+            sec.el.style.left = `${pos.left + sec.dx}px`;
+            sec.el.style.top = `${pos.top + sec.dy}px`;
+          }
+
+          if (state.secondaries.length > 0) refreshSelectionHighlight();
         }
       });
+    }
+    return;
+  }
+
+  if (state.marqueeActive && state.pendingMarquee) {
+    updateMarqueeBox(state.pendingMarquee.startX, state.pendingMarquee.startY, e.clientX, e.clientY);
+    return;
+  }
+
+  if (state.pendingMarquee) {
+    const dx = e.clientX - state.pendingMarquee.startX;
+    const dy = e.clientY - state.pendingMarquee.startY;
+    if (dx * dx + dy * dy > DRAG_THRESHOLD_SQ) {
+      commitMarquee(state.pendingMarquee, e);
     }
     return;
   }
@@ -368,11 +531,15 @@ function onMouseMove(e: MouseEvent): void {
   renderHighlight(el);
 }
 
-function onMouseUp(): void {
+function onMouseUp(e: MouseEvent): void {
   if (state.dragging) {
     finishDrag();
+  } else if (state.marqueeActive || state.pendingMarquee) {
+    const addToSelection = e.ctrlKey || e.metaKey;
+    finishMarquee(e, addToSelection);
   }
   state.pending = null;
+  state.pendingMarquee = null;
 }
 
 function onClick(e: MouseEvent): void {
@@ -380,10 +547,14 @@ function onClick(e: MouseEvent): void {
   e.preventDefault();
   e.stopPropagation();
 
-  if (!state.dragging) {
+  if (!state.dragging && !state.marqueeActive) {
     const el = e.target as HTMLElement;
     if (!shouldIgnore(el)) {
-      setSelected(el);
+      if (e.ctrlKey || e.metaKey) {
+        toggleSelected(el);
+      } else {
+        replaceSelection(el);
+      }
     }
   }
 }
@@ -396,7 +567,16 @@ function onDragStart(e: DragEvent): void {
 function onKeyDown(e: KeyboardEvent): void {
   if (!state.active) return;
   if (e.key === 'Escape') {
-    if (state.dragging) {
+    if (state.marqueeActive || state.pendingMarquee) {
+      if (state.marqueeBox) {
+        state.marqueeBox.remove();
+        state.marqueeBox = null;
+      }
+      state.marqueeActive = false;
+      state.pendingMarquee = null;
+      document.body.style.cursor = 'grab';
+      document.body.style.userSelect = '';
+    } else if (state.dragging) {
       const el = state.dragging.el;
       const orig = state.movedElements.get(el);
       if (orig) {
@@ -407,24 +587,33 @@ function onKeyDown(e: KeyboardEvent): void {
         el.style.position = '';
         el.style.zIndex = '';
       }
+      for (const sec of state.secondaries) {
+        const secOrig = state.movedElements.get(sec.el);
+        if (secOrig) {
+          sec.el.style.cssText = secOrig.cssText;
+          secOrig.placeholder.remove();
+          state.movedElements.delete(sec.el);
+        }
+      }
       state.dragging = null;
       state.pending = null;
+      state.secondaries = [];
       document.body.style.cursor = 'grab';
       document.body.style.userSelect = '';
       clearHighlight();
       clearSnapGuides();
       state.hoveredEl = null;
-      setSelected(null);
+      replaceSelection(null);
     } else {
       state.pending = null;
-      setSelected(null);
+      replaceSelection(null);
       resetAll();
     }
   }
 }
 
 function onScroll(): void {
-  if (!state.active || state.dragging || state.pending) return;
+  if (!state.active || state.dragging || state.pending || state.marqueeActive) return;
   state.hoveredEl = null;
   clearHighlight();
 }
@@ -433,7 +622,9 @@ function onWindowMouseLeave(e: MouseEvent): void {
   if (!state.active) return;
   if (e.relatedTarget !== null) return;
   if (state.dragging) finishDrag();
+  if (state.marqueeActive && state.pendingMarquee) finishMarquee(e, false);
   state.pending = null;
+  state.pendingMarquee = null;
 }
 
 // --- Public API ---
@@ -456,6 +647,7 @@ export function teardownDragCore(): void {
   cancelAnimationFrame(state.rafId);
   clearHighlight();
   clearSnapGuides();
+  if (state.marqueeBox) state.marqueeBox.remove();
   document.removeEventListener('mousedown', onMouseDown, true);
   document.removeEventListener('mousemove', onMouseMove, true);
   document.removeEventListener('mouseup', onMouseUp, true);

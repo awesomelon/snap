@@ -1,4 +1,5 @@
 import { getFeatureLayer, removeFeatureLayer } from '../../overlay-host';
+import { swallowDisconnect } from '@shared/messages';
 import type { GridReport, GridSettings } from '@shared/types';
 
 const LAYER_ID = 'drag-grid';
@@ -11,19 +12,32 @@ let manualOverride = false;
 // --- Auto-detection ---
 
 function detectContainer(): { el: Element; maxWidth: number } | null {
-  const candidates: { el: Element; maxWidth: number; width: number }[] = [];
-  const elements = document.querySelectorAll('body > *, body > * > *');
-  for (const el of elements) {
+  // Two-pass detection: check direct children first (most sites), then grandchildren
+  const vw = window.innerWidth;
+  let best: { el: Element; maxWidth: number } | null = null;
+
+  for (const el of document.body.children) {
     const style = getComputedStyle(el);
     const maxW = parseFloat(style.maxWidth);
-    const width = el.getBoundingClientRect().width;
-    if (!isNaN(maxW) && maxW > 0 && maxW < window.innerWidth && width > 200) {
-      candidates.push({ el, maxWidth: maxW, width });
+    if (!isNaN(maxW) && maxW > 0 && maxW < vw && el.getBoundingClientRect().width > 200) {
+      if (!best || maxW > best.maxWidth) best = { el, maxWidth: maxW };
     }
   }
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => b.maxWidth - a.maxWidth);
-  return { el: candidates[0].el, maxWidth: candidates[0].maxWidth };
+  if (best) return best;
+
+  // Fallback: check grandchildren only if direct children had no max-width container
+  for (const parent of document.body.children) {
+    for (const el of parent.children) {
+      const style = getComputedStyle(el);
+      const maxW = parseFloat(style.maxWidth);
+      if (!isNaN(maxW) && maxW > 0 && maxW < vw && el.getBoundingClientRect().width > 200) {
+        if (!best || maxW > best.maxWidth) best = { el, maxWidth: maxW };
+      }
+    }
+    if (best) return best;
+  }
+
+  return null;
 }
 
 function detectGrid(container: Element): { columns: number; gutter: number } {
@@ -233,7 +247,7 @@ function onResize(): void {
       resizeDebounceId = 0;
       lastReport = analyze();
       renderGrid(lastReport);
-      chrome.runtime.sendMessage({ type: 'GRID_REPORT', data: lastReport }).catch(() => {});
+      chrome.runtime.sendMessage({ type: 'GRID_REPORT', data: lastReport }).catch(swallowDisconnect);
     }, RESIZE_DEBOUNCE_MS);
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "snap",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "웹페이지 요소를 드래그하여 레이아웃을 탐색하는 Chrome 확장 프로그램",
   "type": "module",

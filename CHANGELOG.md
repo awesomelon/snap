@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2.0] - 2026-03-22 — Element-Based Magnetic Snap
+
+### Added
+- Figma 수준의 요소 기반 magnetic 스냅 — 다른 요소의 엣지(left/right/top/bottom)와 중심선(centerX/centerY)에 자동 정렬
+- 부모 컨테이너 경계 스냅 — 컨테이너 안에서 요소를 정렬할 때 경계에 스냅
+- 동일 간격 분배 가이드 — 요소 사이의 간격이 균등할 때 마젠타 가이드 표시
+- 거리 라벨 — 드래그 중 주변 요소까지의 px 거리를 실시간 표시
+- 계층적 요소 스캔 — 형제 → 부모 → 삼촌 요소 순서로 스냅 대상 탐색
+- 실시간 재스캔 — 스크롤 변경 시 스냅 대상 자동 업데이트
+
+### Removed
+- Grid 오버레이 시스템 전체 제거 (컬럼 그리드 자동 감지, 그리드 렌더링, 베이스라인 그리드)
+- 사이드패널 Grid 설정 UI 제거 (DragGridConfig 컴포넌트)
+- Grid 관련 메시지 프로토콜 4개 제거 (GRID_REPORT, UPDATE_GRID_SETTINGS, RESET_GRID_AUTO, SET_GRID_VISIBLE)
+
+### Changed
+- 스냅 엔진: `snapToGrid()` → `snapToElements()` — 요소 엣지/중심 기반으로 전환
+- 사이드패널: ON/OFF 토글만 유지, 안내 문구를 "주변 요소에 자동으로 스냅됩니다"로 변경
+- DESIGN.md: Grid 색상 체계 제거, 분배 가이드/거리 라벨 스타일 추가
+
 ## [1.0.1.0] - 2026-03-21
 
 ### Removed

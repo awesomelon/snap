@@ -1,4 +1,4 @@
-import { mountKeyboardHandler, unmountKeyboardHandler, setSelected } from './drag/selection-state';
+import { mountKeyboardHandler, unmountKeyboardHandler, replaceSelection } from './drag/selection-state';
 import { initDragCore, teardownDragCore, nudgeElement } from './drag/drag-core';
 import { removeFeatureLayer } from '../overlay-host';
 
@@ -10,6 +10,6 @@ export function activateDrag(): void {
 export function deactivateDrag(): void {
   teardownDragCore();
   unmountKeyboardHandler();
-  setSelected(null);
+  replaceSelection(null);
   removeFeatureLayer('drag');
 }

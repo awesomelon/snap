@@ -106,8 +106,3 @@ export function unmountKeyboardHandler(): void {
   moveCallback = null;
   clearSelectionHighlight();
 }
-
-// Backward-compat alias used by element-drag.ts (deactivateDrag)
-export function setSelected(el: HTMLElement | null): void {
-  replaceSelection(el);
-}

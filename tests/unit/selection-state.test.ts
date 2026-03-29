@@ -23,7 +23,6 @@ const {
   refreshSelectionHighlight,
   mountKeyboardHandler,
   unmountKeyboardHandler,
-  setSelected,
 } = await import('../../src/content/modules/drag/selection-state');
 
 function mockEl(left = 10, top = 20, width = 100, height = 50): HTMLElement {
@@ -80,18 +79,6 @@ describe('selection-state', () => {
       const el = mockEl();
       replaceSelection(el);
       replaceSelection(null);
-      expect(getSelected().size).toBe(0);
-    });
-  });
-
-  // --- setSelected (backward-compat alias) ---
-
-  describe('setSelected', () => {
-    it('works as replaceSelection alias', () => {
-      const el = mockEl();
-      setSelected(el);
-      expect(getSelected().has(el)).toBe(true);
-      setSelected(null);
       expect(getSelected().size).toBe(0);
     });
   });

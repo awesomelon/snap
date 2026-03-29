@@ -1,7 +1,6 @@
 import { getFeatureLayer } from '../../overlay-host';
-import { snapToElements, scanVisibleElements, invalidateScanCache, detectEqualSpacing, computeDistances } from './snap-engine';
-import type { ElementRect } from '@shared/types';
-import { renderSnapGuides, clearSnapGuides, renderSpacingGuides, renderDistanceLabels, clearAllGuides } from './snap-guides';
+import { snapToElements, scanVisibleElements, invalidateScanCache, detectEqualSpacing, computeDistances, makeElementRect } from './snap-engine';
+import { renderSnapGuides, renderSpacingGuides, renderDistanceLabels, clearAllGuides } from './snap-guides';
 import {
   getSelected,
   replaceSelection,
@@ -72,6 +71,7 @@ interface DragState {
   pending: PendingDrag | null;
   dragging: ActiveDrag | null;
   secondaries: SecondaryDrag[];
+  draggedEls: Set<HTMLElement>;
   hoveredEl: HTMLElement | null;
   highlightBox: HTMLDivElement | null;
   rafId: number;
@@ -79,7 +79,6 @@ interface DragState {
   lastMouseY: number;
   wasSnappedX: boolean;
   wasSnappedY: boolean;
-  elementRects: ElementRect[];
 }
 
 function createInitialState(): DragState {
@@ -89,6 +88,7 @@ function createInitialState(): DragState {
     pending: null,
     dragging: null,
     secondaries: [],
+    draggedEls: new Set(),
     hoveredEl: null,
     highlightBox: null,
     rafId: 0,
@@ -96,7 +96,6 @@ function createInitialState(): DragState {
     lastMouseY: 0,
     wasSnappedX: false,
     wasSnappedY: false,
-    elementRects: [],
   };
 }
 
@@ -224,13 +223,9 @@ export function magneticInterpolate(
 // --- Snap helper ---
 
 function applySnap(rawLeft: number, rawTop: number, w: number, h: number): { left: number; top: number } {
-  // Rescan elements (cache invalidates only on scroll change)
-  const draggedEls = new Set<HTMLElement>();
-  if (state.dragging) draggedEls.add(state.dragging.el);
-  for (const sec of state.secondaries) draggedEls.add(sec.el);
-  state.elementRects = scanVisibleElements(draggedEls);
+  const elementRects = scanVisibleElements(state.draggedEls);
 
-  if (state.elementRects.length === 0) {
+  if (elementRects.length === 0) {
     renderSnapGuides(null, null);
     renderSpacingGuides([]);
     renderDistanceLabels([]);
@@ -239,7 +234,7 @@ function applySnap(rawLeft: number, rawTop: number, w: number, h: number): { lef
 
   const cbX = state.dragging?.cbOffsetX ?? 0;
   const cbY = state.dragging?.cbOffsetY ?? 0;
-  const snapped = snapToElements(rawLeft + cbX, rawTop + cbY, w, h, state.elementRects);
+  const snapped = snapToElements(rawLeft + cbX, rawTop + cbY, w, h, elementRects);
 
   const snapTargetLeft = snapped.snapTargetLeft - cbX;
   const snapTargetTop = snapped.snapTargetTop - cbY;
@@ -268,18 +263,12 @@ function applySnap(rawLeft: number, rawTop: number, w: number, h: number): { lef
     state.wasSnappedY ? snapped.nearestGuideY : null,
   );
 
-  // Compute spacing guides and distance labels
-  const dragRect: ElementRect = {
-    left: finalLeft + cbX, top: finalTop + cbY,
-    right: finalLeft + cbX + w, bottom: finalTop + cbY + h,
-    centerX: finalLeft + cbX + w / 2, centerY: finalTop + cbY + h / 2,
-    width: w, height: h,
-  };
-  const spacingX = detectEqualSpacing(dragRect, state.elementRects, 'x');
-  const spacingY = detectEqualSpacing(dragRect, state.elementRects, 'y');
+  const dragRect = makeElementRect(finalLeft + cbX, finalTop + cbY, w, h);
+  const spacingX = detectEqualSpacing(dragRect, elementRects, 'x');
+  const spacingY = detectEqualSpacing(dragRect, elementRects, 'y');
   renderSpacingGuides([...spacingX, ...spacingY]);
 
-  const distances = computeDistances(dragRect, state.elementRects);
+  const distances = computeDistances(dragRect, elementRects);
   renderDistanceLabels(distances);
 
   return { left: finalLeft, top: finalTop };
@@ -315,10 +304,12 @@ function commitDrag(pending: PendingDrag, e: MouseEvent): void {
 
   // Compute secondary offsets for group drag
   state.secondaries = [];
+  state.draggedEls = new Set([el]);
   if (isGroupDrag) {
     const primaryRect = el.getBoundingClientRect();
     for (const sel of selectedSet) {
       if (sel === el) continue;
+      state.draggedEls.add(sel);
       const { offset: selOffset } = promoteToFixed(sel);
       const selRect = sel.getBoundingClientRect();
       state.secondaries.push({

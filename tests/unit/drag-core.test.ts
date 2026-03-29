@@ -99,7 +99,7 @@ describe('onClick — empty space clears selection', () => {
     const selState = await import('../../src/content/modules/drag/selection-state');
     getSelected = selState.getSelected;
     replaceSelection = selState.replaceSelection;
-    initDragCore({ getSnapGrid: () => null });
+    initDragCore();
   });
 
   afterEach(() => {

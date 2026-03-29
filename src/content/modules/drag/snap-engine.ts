@@ -1,6 +1,22 @@
 import type { ElementRect, SpacingGuide, DistanceLabel } from '@shared/types';
 
 export const SNAP_THRESHOLD = 8;
+const DISTANCE_MAX_RANGE = 200;
+
+export function makeElementRect(left: number, top: number, width: number, height: number): ElementRect {
+  return {
+    left, top, width, height,
+    right: left + width,
+    bottom: top + height,
+    centerX: left + width / 2,
+    centerY: top + height / 2,
+  };
+}
+
+function overlapMidpoint(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
+  const start = Math.max(aStart, bStart);
+  return start + (Math.min(aEnd, bEnd) - start) / 2;
+}
 
 export interface SnapResult {
   left: number;
@@ -81,13 +97,10 @@ export function snapAxisToLines(
 
 // --- Scan cache ---
 let cachedRects: ElementRect[] = [];
+let cachedLines: { xLines: number[]; yLines: number[] } = { xLines: [], yLines: [] };
 let cachedScrollX = -1;
 let cachedScrollY = -1;
 
-/**
- * Hierarchical scan of visible elements relative to dragged elements.
- * DOM-dependent — cannot be unit-tested without a browser.
- */
 export function scanVisibleElements(draggedEls: Set<HTMLElement>): ElementRect[] {
   try {
     // Invalidate cache when scroll position changes
@@ -113,8 +126,7 @@ export function scanVisibleElements(draggedEls: Set<HTMLElement>): ElementRect[]
       const parent = dragEl.parentElement;
       if (!parent) continue;
 
-      // Collect sibling elements
-      for (const child of Array.from(parent.children)) {
+      for (const child of parent.children) {
         if (seen.has(child)) continue;
         seen.add(child);
         const r = filterAndMakeRect(child as HTMLElement, vpW, vpH);
@@ -131,7 +143,7 @@ export function scanVisibleElements(draggedEls: Set<HTMLElement>): ElementRect[]
       // Grandparent level: uncle/aunt elements
       const grandparent = parent.parentElement;
       if (grandparent) {
-        for (const uncle of Array.from(grandparent.children)) {
+        for (const uncle of grandparent.children) {
           if (seen.has(uncle) || uncle === parent) continue;
           seen.add(uncle);
           const r = filterAndMakeRect(uncle as HTMLElement, vpW, vpH);
@@ -141,53 +153,31 @@ export function scanVisibleElements(draggedEls: Set<HTMLElement>): ElementRect[]
     }
 
     cachedRects = rects;
+    cachedLines = collectSnapLines(rects);
     return rects;
   } catch {
     return [];
   }
 }
 
-/**
- * Pure filtering logic extracted for potential testing.
- * Returns an ElementRect if the element passes size filters, null otherwise.
- */
 export function filterAndMakeRect(
   el: HTMLElement,
   viewportWidth: number,
   viewportHeight: number,
 ): ElementRect | null {
   const r = el.getBoundingClientRect();
-  // Skip tiny elements
   if (r.width < 5 || r.height < 5) return null;
-  // Skip elements covering > 80% of viewport in both dimensions
   if (r.width > viewportWidth * 0.8 && r.height > viewportHeight * 0.8) return null;
-
-  return {
-    left: r.left,
-    right: r.right,
-    top: r.top,
-    bottom: r.bottom,
-    centerX: r.left + r.width / 2,
-    centerY: r.top + r.height / 2,
-    width: r.width,
-    height: r.height,
-  };
+  return makeElementRect(r.left, r.top, r.width, r.height);
 }
 
-/**
- * Invalidate the scan cache (e.g., on scroll during non-drag).
- */
 export function invalidateScanCache(): void {
   cachedRects = [];
+  cachedLines = { xLines: [], yLines: [] };
   cachedScrollX = -1;
   cachedScrollY = -1;
 }
 
-/**
- * Extract snap lines from element rects.
- * For each rect: left, right, centerX -> xLines; top, bottom, centerY -> yLines.
- * Deduplicates lines within 0.5px of each other and sorts.
- */
 export function collectSnapLines(rects: ElementRect[]): { xLines: number[]; yLines: number[] } {
   const rawX: number[] = [];
   const rawY: number[] = [];
@@ -205,20 +195,16 @@ export function collectSnapLines(rects: ElementRect[]): { xLines: number[]; yLin
 
 function deduplicateAndSort(values: number[]): number[] {
   if (values.length === 0) return [];
-  values.sort((a, b) => a - b);
-  const result: number[] = [values[0]];
-  for (let i = 1; i < values.length; i++) {
-    if (Math.abs(values[i] - result[result.length - 1]) > 0.5) {
-      result.push(values[i]);
+  const sorted = values.slice().sort((a, b) => a - b);
+  const result: number[] = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (Math.abs(sorted[i] - result[result.length - 1]) > 0.5) {
+      result.push(sorted[i]);
     }
   }
   return result;
 }
 
-/**
- * Snap a dragged element to nearby element edges and centers.
- * Returns a SnapResult compatible with the existing magnetic snap system.
- */
 export function snapToElements(
   left: number,
   top: number,
@@ -226,7 +212,10 @@ export function snapToElements(
   height: number,
   rects: ElementRect[],
 ): SnapResult {
-  const { xLines, yLines } = collectSnapLines(rects);
+  // Use cached lines when rects match the scan cache; fall back to fresh computation
+  const { xLines, yLines } = rects === cachedRects && cachedLines.xLines.length > 0
+    ? cachedLines
+    : collectSnapLines(rects);
 
   const right = left + width;
   const bottom = top + height;
@@ -332,10 +321,6 @@ export function snapToElements(
   };
 }
 
-/**
- * Detect equal spacing between the dragged element and its neighbors.
- * Returns SpacingGuide entries when gaps match (within 1px tolerance).
- */
 export function detectEqualSpacing(
   dragRect: ElementRect,
   otherRects: ElementRect[],
@@ -452,15 +437,10 @@ export function detectEqualSpacing(
   return guides;
 }
 
-/**
- * Compute distance labels from the dragged element to its nearest neighbors in 4 directions.
- * Returns up to 4 labels (left, right, up, down) for elements within 200px.
- */
 export function computeDistances(
   dragRect: ElementRect,
   otherRects: ElementRect[],
 ): DistanceLabel[] {
-  const MAX_RANGE = 200;
   const labels: DistanceLabel[] = [];
 
   // LEFT: elements whose right edge is to the left of dragRect's left edge,
@@ -477,7 +457,7 @@ export function computeDistances(
     // Left neighbor
     if (vOverlap && r.right <= dragRect.left) {
       const dist = dragRect.left - r.right;
-      if (dist <= MAX_RANGE && (!bestLeft || dist < bestLeft.dist)) {
+      if (dist <= DISTANCE_MAX_RANGE && (!bestLeft || dist < bestLeft.dist)) {
         bestLeft = { rect: r, dist };
       }
     }
@@ -485,7 +465,7 @@ export function computeDistances(
     // Right neighbor
     if (vOverlap && r.left >= dragRect.right) {
       const dist = r.left - dragRect.right;
-      if (dist <= MAX_RANGE && (!bestRight || dist < bestRight.dist)) {
+      if (dist <= DISTANCE_MAX_RANGE && (!bestRight || dist < bestRight.dist)) {
         bestRight = { rect: r, dist };
       }
     }
@@ -493,7 +473,7 @@ export function computeDistances(
     // Up neighbor
     if (hOverlap && r.bottom <= dragRect.top) {
       const dist = dragRect.top - r.bottom;
-      if (dist <= MAX_RANGE && (!bestUp || dist < bestUp.dist)) {
+      if (dist <= DISTANCE_MAX_RANGE && (!bestUp || dist < bestUp.dist)) {
         bestUp = { rect: r, dist };
       }
     }
@@ -501,56 +481,40 @@ export function computeDistances(
     // Down neighbor
     if (hOverlap && r.top >= dragRect.bottom) {
       const dist = r.top - dragRect.bottom;
-      if (dist <= MAX_RANGE && (!bestDown || dist < bestDown.dist)) {
+      if (dist <= DISTANCE_MAX_RANGE && (!bestDown || dist < bestDown.dist)) {
         bestDown = { rect: r, dist };
       }
     }
   }
 
   if (bestLeft) {
-    const crossPos = Math.max(dragRect.top, bestLeft.rect.top) +
-      (Math.min(dragRect.bottom, bestLeft.rect.bottom) - Math.max(dragRect.top, bestLeft.rect.top)) / 2;
     labels.push({
-      axis: 'x',
-      from: bestLeft.rect.right,
-      to: dragRect.left,
-      crossPos,
+      axis: 'x', from: bestLeft.rect.right, to: dragRect.left,
+      crossPos: overlapMidpoint(dragRect.top, dragRect.bottom, bestLeft.rect.top, bestLeft.rect.bottom),
       distance: bestLeft.dist,
     });
   }
 
   if (bestRight) {
-    const crossPos = Math.max(dragRect.top, bestRight.rect.top) +
-      (Math.min(dragRect.bottom, bestRight.rect.bottom) - Math.max(dragRect.top, bestRight.rect.top)) / 2;
     labels.push({
-      axis: 'x',
-      from: dragRect.right,
-      to: bestRight.rect.left,
-      crossPos,
+      axis: 'x', from: dragRect.right, to: bestRight.rect.left,
+      crossPos: overlapMidpoint(dragRect.top, dragRect.bottom, bestRight.rect.top, bestRight.rect.bottom),
       distance: bestRight.dist,
     });
   }
 
   if (bestUp) {
-    const crossPos = Math.max(dragRect.left, bestUp.rect.left) +
-      (Math.min(dragRect.right, bestUp.rect.right) - Math.max(dragRect.left, bestUp.rect.left)) / 2;
     labels.push({
-      axis: 'y',
-      from: bestUp.rect.bottom,
-      to: dragRect.top,
-      crossPos,
+      axis: 'y', from: bestUp.rect.bottom, to: dragRect.top,
+      crossPos: overlapMidpoint(dragRect.left, dragRect.right, bestUp.rect.left, bestUp.rect.right),
       distance: bestUp.dist,
     });
   }
 
   if (bestDown) {
-    const crossPos = Math.max(dragRect.left, bestDown.rect.left) +
-      (Math.min(dragRect.right, bestDown.rect.right) - Math.max(dragRect.left, bestDown.rect.left)) / 2;
     labels.push({
-      axis: 'y',
-      from: dragRect.bottom,
-      to: bestDown.rect.top,
-      crossPos,
+      axis: 'y', from: dragRect.bottom, to: bestDown.rect.top,
+      crossPos: overlapMidpoint(dragRect.left, dragRect.right, bestDown.rect.left, bestDown.rect.right),
       distance: bestDown.dist,
     });
   }

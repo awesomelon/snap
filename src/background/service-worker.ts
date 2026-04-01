@@ -32,11 +32,30 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Handle GET_TAB_ID from content scripts (not a Message type)
+  if (message && typeof message === 'object' && message.type === 'GET_TAB_ID') {
+    sendResponse({ tabId: sender.tab?.id ?? null });
+    return true;
+  }
+
   if (!isMessage(message)) return;
   const fromContentScript = !!sender.tab;
 
   if (message.type === 'TOGGLE_FEATURE') {
     sendToActiveTab(message);
+  }
+
+  // Forward overlay messages from side panel to active tab (not from content scripts)
+  if (!fromContentScript && (
+    message.type === 'OVERLAY_SETTINGS_UPDATE' ||
+    message.type === 'OVERLAY_CLEAR' ||
+    message.type === 'OVERLAY_FIT_TO_VIEWPORT')) {
+    sendToActiveTab(message);
+  }
+
+  // Forward fit result from content script to side panel
+  if (fromContentScript && message.type === 'OVERLAY_FIT_RESULT') {
+    chrome.runtime.sendMessage(message).catch(swallowDisconnect);
   }
 
   if (fromContentScript && (message.type === 'CONTENT_READY' || message.type === 'FEATURE_STATE_CHANGED')) {
